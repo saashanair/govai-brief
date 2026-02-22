@@ -1,0 +1,20 @@
+name: Daily AI Briefing
+
+on:
+  schedule:
+    - cron: '0 8 * * 1-5'   # 8am UTC Mon–Fri (= 8am GMT winter, 9am BST summer)
+  workflow_dispatch:          # allow manual trigger from GitHub Actions UI
+
+jobs:
+  briefing:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - name: Run briefing
+        run: uv run python main.py
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GMAIL_USER: ${{ secrets.GMAIL_USER }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          EMAIL_TO: ${{ secrets.EMAIL_TO }}

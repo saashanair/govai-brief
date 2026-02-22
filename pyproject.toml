@@ -1,0 +1,10 @@
+[project]
+name = "ai-state-intel"
+version = "0.1.0"
+description = "Add your description here"
+requires-python = ">=3.10"
+dependencies = [
+    "feedparser>=6.0.12",
+    "google-genai>=1.64.0",
+    "python-dotenv>=1.2.1",
+]
