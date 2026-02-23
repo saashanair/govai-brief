@@ -189,9 +189,8 @@ def send_email(subject: str, plain_body: str, html_body: str = None) -> None:
         msg = MIMEText(plain_body, "plain")
     msg["Subject"] = subject
     msg["From"]    = f"AI Governance Briefing <{gmail_user}>"
-    msg["To"]      = recipients[0]
-    if len(recipients) > 1:
-        msg["Bcc"] = ", ".join(recipients[1:])  # hide colleague addresses from each other
+    msg["To"]      = gmail_user  # all recipients go via BCC to preserve privacy
+    msg["Bcc"]     = ", ".join(recipients)
     with smtplib.SMTP("smtp.gmail.com", 587) as smtp:
         smtp.starttls()
         smtp.login(gmail_user, gmail_password)
