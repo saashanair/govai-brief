@@ -127,6 +127,45 @@ After each run, the workflow commits the dated briefing file (`briefings/YYYY-MM
 
 ---
 
+## Scoring and filtering
+
+Each article that passes the relevance filter is assigned two scores by Gemini.
+
+### Importance (1–5)
+Measures the weight of the governmental or policy action described. Used for display and sorting only — not used for filtering.
+
+| Score | Criteria |
+|---|---|
+| 5 | Executive order, major legislation passed, national AI strategy launch, or investment above $500M |
+| 4 | Significant regulatory guidance, ministerial or cabinet-level announcement, major procurement or partnership |
+| 3 | Regional initiative, policy consultation launched, inter-agency framework or pilot programme |
+| 2 | Academic research with government funding, minor committee hearing, incremental policy update |
+| 1 | Commentary, survey, market research, or general industry news |
+
+### UK Relevance (1–5)
+Measures how directly useful the article is to a UK government AI practitioner. This is the primary filter for non-Official sources.
+
+| Score | Criteria |
+|---|---|
+| 5 | Directly affects UK AI policy, legislation, procurement, or regulation |
+| 4 | Close comparator jurisdiction (US, EU, Australia, Singapore, Canada) making a decision the UK is likely to follow or diverge from |
+| 3 | International development with clear UK policy implications or competitive significance |
+| 2 | General AI governance trend with weak UK connection |
+| 1 | No meaningful UK relevance |
+
+### Filtering rules
+Whether an article appears in the briefing depends on its source tier and UK relevance score.
+
+| Tier | Rule |
+|---|---|
+| Official | Always included — no score threshold |
+| Analysis | Included if UK relevance ≥ 2 |
+| Discourse | Included if UK relevance ≥ 4 |
+
+**Dynamic backoff:** on days with more than 12 items passing the above rules, the Discourse threshold is raised to UK relevance ≥ 5. This keeps the briefing focused on heavy news days without permanently excluding Discourse sources.
+
+---
+
 ## Project structure
 
 ```
