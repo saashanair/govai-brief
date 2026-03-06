@@ -1,7 +1,7 @@
 import json
 from google import genai
 from config import (
-    MODEL,
+    MODEL, MODEL_FAST,
     RELEVANCE_PROMPT, RELEVANCE_SCHEMA,
     SUMMARY_PROMPT, BATCH_SUMMARY_SCHEMA,
     CLUSTER_PROMPT, CLUSTER_SCHEMA,
@@ -19,7 +19,7 @@ def filter_relevant(client: genai.Client, entries: list[dict]) -> list[dict]:
     )
     prompt = f"{RELEVANCE_PROMPT}\n\nReturn the indices of all relevant articles:\n{items}"
     response = client.models.generate_content(
-        model=MODEL,
+        model=MODEL_FAST,
         contents=prompt,
         config={"response_mime_type": "application/json", "response_schema": RELEVANCE_SCHEMA, "temperature": 0},
     )
@@ -37,7 +37,7 @@ def cluster_stories(client: genai.Client, entries: list[dict]) -> list[list[int]
     )
     prompt = f"{CLUSTER_PROMPT}\n\nArticles:\n{items}"
     response = client.models.generate_content(
-        model=MODEL,
+        model=MODEL_FAST,
         contents=prompt,
         config={"response_mime_type": "application/json", "response_schema": CLUSTER_SCHEMA, "temperature": 0},
     )

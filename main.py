@@ -232,8 +232,18 @@ def main():
     for feed in feeds:
         all_entries.extend(fetch_entries(feed, lookback_dates))
 
+    # Deduplicate by URL before any API calls — gov.uk keyword searches often return the same
+    # article for multiple keywords, inflating token usage across all 4 Gemini calls.
+    seen_urls = set()
+    deduped = []
+    for e in all_entries:
+        if e["link"] not in seen_urls:
+            seen_urls.add(e["link"])
+            deduped.append(e)
+    all_entries = deduped
+
     debug = bool(os.getenv("DEBUG"))
-    print(f"Fetched {len(all_entries)} entries. Filtering for AI relevance...")
+    print(f"Fetched {len(all_entries)} entries (after URL dedup). Filtering for AI relevance...")
 
     # API call 1: batch relevance filter
     relevant = filter_relevant(client, all_entries)

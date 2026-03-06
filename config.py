@@ -63,7 +63,8 @@ FEEDS = [
     _feed("EU",    "Discourse", "https://www.euractiv.com/feed/"),                         # EU policy journalism
 ]
 
-MODEL = "gemini-2.5-flash"
+MODEL = "gemini-2.5-flash"       # summarisation + headline — quality matters
+MODEL_FAST = "gemini-2.5-flash-lite"  # relevance filter + clustering — simpler tasks
 
 RELEVANCE_PROMPT = (
     "Determine which of the following articles are substantially about artificial intelligence, "
