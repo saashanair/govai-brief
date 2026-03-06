@@ -1,7 +1,11 @@
+"""Gemini API calls for the 4-step pipeline: filter, cluster, summarise, headline."""
+
 import json
 from google import genai
-from config import (
+from .config import (
     MODEL, MODEL_FAST,
+    FILTER_CONTEXT_CHARS, CLUSTER_CONTEXT_CHARS,
+    SUMMARY_CONTEXT_CHARS, HEADLINE_CONTEXT_CHARS,
     RELEVANCE_PROMPT, RELEVANCE_SCHEMA,
     SUMMARY_PROMPT, BATCH_SUMMARY_SCHEMA,
     CLUSTER_PROMPT, CLUSTER_SCHEMA,
@@ -14,7 +18,7 @@ def filter_relevant(client: genai.Client, entries: list[dict]) -> list[dict]:
     if not entries:
         return []
     items = "\n".join(
-        f"[{i}] {e['title']} | {e['summary'][:300]}"
+        f"[{i}] {e['title']} | {e['summary'][:FILTER_CONTEXT_CHARS]}"
         for i, e in enumerate(entries)
     )
     prompt = f"{RELEVANCE_PROMPT}\n\nReturn the indices of all relevant articles:\n{items}"
@@ -32,7 +36,7 @@ def cluster_stories(client: genai.Client, entries: list[dict]) -> list[list[int]
     if not entries:
         return []
     items = "\n".join(
-        f"[{i}] {e['title']} | {e['summary'][:300]}"
+        f"[{i}] {e['title']} | {e['summary'][:CLUSTER_CONTEXT_CHARS]}"
         for i, e in enumerate(entries)
     )
     prompt = f"{CLUSTER_PROMPT}\n\nArticles:\n{items}"
@@ -50,7 +54,7 @@ def summarise_all(client: genai.Client, entries: list[dict]) -> list[dict]:
     if not entries:
         return []
     items = "\n\n---\n\n".join(
-        f"[{i}] Source country hint: {e['country']} | Title: {e['title']}\n{e['summary'][:1000]}"
+        f"[{i}] Source country hint: {e['country']} | Title: {e['title']}\n{e['summary'][:SUMMARY_CONTEXT_CHARS]}"
         for i, e in enumerate(entries)
     )
     prompt = f"{SUMMARY_PROMPT}\n\nSummarise each of the {len(entries)} articles below:\n\n{items}"
@@ -72,7 +76,7 @@ def generate_headline(client: genai.Client, summaries: list[dict]) -> str:
     if not summaries:
         return ""
     items = "\n".join(
-        f"- [{s.get('action_type', 'Other')}] {s.get('title', '—')}: {s.get('body', '')[:200]}"
+        f"- [{s.get('action_type', 'Other')}] {s.get('title', '—')}: {s.get('body', '')[:HEADLINE_CONTEXT_CHARS]}"
         for s in summaries
     )
     prompt = f"{HEADLINE_PROMPT}\n\nToday's items:\n{items}"

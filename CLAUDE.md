@@ -83,7 +83,7 @@ Identified by Gemini from article content. Feed labels (APAC, INTL) used as fall
 
 - Python only
 - Managed with uv
-- Three files: config.py, gemini.py, main.py
+- Three files in `govai_brief/`: config.py, gemini.py, main.py
 - No database (briefings/ flat file archive is acceptable)
 - No web server
 - No authentication
@@ -117,9 +117,9 @@ Only implement what is explicitly requested.
 ## Running Locally
 
 ```bash
-uv run python main.py              # normal run (Mon–Fri only)
-FORCE_RUN=1 uv run python main.py  # bypass weekend check
-DEBUG=1 FORCE_RUN=1 uv run python main.py  # print all intermediate state
+uv run govai-brief                          # normal run (Mon–Fri only)
+FORCE_RUN=1 uv run govai-brief              # bypass weekend check
+DEBUG=1 FORCE_RUN=1 uv run govai-brief      # print all intermediate state
 ```
 
 DEBUG mode prints: all relevant items after filter, cluster primaries, and all scored items with PASS/DROP status before final filter.

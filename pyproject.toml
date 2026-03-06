@@ -8,3 +8,12 @@ dependencies = [
     "google-genai>=1.64.0",
     "python-dotenv>=1.2.1",
 ]
+
+[project.scripts]
+govai-brief = "govai_brief.main:main"
+
+[tool.uv]
+package = true
+
+[tool.setuptools.packages.find]
+include = ["govai_brief*"]

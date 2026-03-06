@@ -1,3 +1,5 @@
+"""Entry point for the AI State Intel daily briefing pipeline."""
+
 import html as html_lib
 import os
 import re
@@ -10,8 +12,8 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from google import genai
 
-from config import FEEDS, GOVUK_KEYWORDS, govuk_ai_url
-from gemini import filter_relevant, cluster_stories, summarise_all, generate_headline
+from .config import FEEDS, GOVUK_KEYWORDS, govuk_ai_url, FEED_ENTRY_LIMIT
+from .gemini import filter_relevant, cluster_stories, summarise_all, generate_headline
 
 load_dotenv()
 
@@ -24,7 +26,7 @@ def strip_html(text: str) -> str:
     return re.sub(r'<[^>]+>', '', text)
 
 
-def fetch_entries(feed: dict, lookback_dates: set, limit: int = 10) -> list[dict]:
+def fetch_entries(feed: dict, lookback_dates: set, limit: int = FEED_ENTRY_LIMIT) -> list[dict]:
     """Fetch entries within lookback_dates. Silently skips feeds that fail or time out."""
     try:
         parsed = feedparser.parse(feed["url"])
@@ -51,6 +53,64 @@ def fetch_entries(feed: dict, lookback_dates: set, limit: int = 10) -> list[dict
             "link": entry.get("link", ""),
         })
     return entries
+
+
+def collect_entries(feeds: list[dict], lookback_dates: set) -> list[dict]:
+    """Fetch all entries from all feeds, deduplicated by URL."""
+    all_entries = []
+    for feed in feeds:
+        all_entries.extend(fetch_entries(feed, lookback_dates))
+    # Deduplicate by URL — gov.uk keyword searches often return the same article for multiple
+    # keywords, inflating token usage across all 4 Gemini calls.
+    seen_urls = set()
+    deduped = []
+    for e in all_entries:
+        if e["link"] not in seen_urls:
+            seen_urls.add(e["link"])
+            deduped.append(e)
+    return deduped
+
+
+def resolve_clusters(relevant_entries: list[dict], clusters: list[list[int]]) -> list[dict]:
+    """For each cluster, pick the highest-tier entry as primary. Ensures every index is covered."""
+    # Guard: ensure every index appears in exactly one cluster
+    clustered_indices = {i for cluster in clusters for i in cluster}
+    for i in range(len(relevant_entries)):
+        if i not in clustered_indices:
+            clusters.append([i])
+
+    clustered_items = []
+    for cluster in clusters:
+        valid = [i for i in cluster if i < len(relevant_entries)]
+        if not valid:
+            continue
+        cluster_entries = [relevant_entries[i] for i in valid]
+        sorted_entries = sorted(cluster_entries, key=lambda e: _TIER_RANK.get(e["tier"], 99))
+        clustered_items.append(sorted_entries[0])
+    return clustered_items
+
+
+def apply_tier_filter(summaries: list[dict], clustered_items: list[dict]) -> list[tuple[dict, dict]]:
+    """Apply tier-aware uk_relevance thresholds, with dynamic backoff on heavy news days."""
+    scored_items = [
+        (s, e)
+        for s, e in zip(summaries, clustered_items)
+        if e["tier"] == "Official"
+        or (e["tier"] == "Analysis" and s.get("uk_relevance", 0) >= 2)
+        or (e["tier"] == "Discourse" and s.get("uk_relevance", 0) >= 4)
+    ]
+    # Dynamic backoff: on heavy news days (> 12 items), tighten Discourse to uk_relevance >= 5
+    if len(scored_items) > 12:
+        scored_items = [
+            (s, e) for s, e in scored_items
+            if e["tier"] != "Discourse" or s.get("uk_relevance", 0) >= 5
+        ]
+    return scored_items
+
+
+def render_section(items: list[tuple[dict, dict]]) -> str:
+    """Render a list of (summary, entry) pairs as formatted text blocks."""
+    return "\n\n".join(format_block(s, e) for s, e in items)
 
 
 def format_block(data: dict, entry: dict) -> str:
@@ -172,7 +232,7 @@ def build_html_email(subject: str, timestamp: str, headline: str, uk_items: list
 
 def send_email(subject: str, plain_body: str, html_body: str = None) -> None:
     """Send the briefing via Gmail SMTP. Silently skips if credentials are not set.
-    EMAIL_TO may be comma-separated; first address gets To:, extras get BCC.
+    EMAIL_TO may be comma-separated; all addresses go to BCC to preserve privacy.
     Sends multipart/alternative (HTML + plain text fallback) when html_body is provided.
     """
     gmail_user     = os.getenv("GMAIL_USER")
@@ -227,25 +287,11 @@ def main():
     client = genai.Client(api_key=api_key)
     socket.setdefaulttimeout(10)  # 10s per feed request; prevents hangs on slow/dead feeds
 
-    # Fetch all entries from all feeds
-    all_entries = []
-    for feed in feeds:
-        all_entries.extend(fetch_entries(feed, lookback_dates))
-
-    # Deduplicate by URL before any API calls — gov.uk keyword searches often return the same
-    # article for multiple keywords, inflating token usage across all 4 Gemini calls.
-    seen_urls = set()
-    deduped = []
-    for e in all_entries:
-        if e["link"] not in seen_urls:
-            seen_urls.add(e["link"])
-            deduped.append(e)
-    all_entries = deduped
-
+    # API call 1: batch relevance filter
+    all_entries = collect_entries(feeds, lookback_dates)
     debug = bool(os.getenv("DEBUG"))
     print(f"Fetched {len(all_entries)} entries (after URL dedup). Filtering for AI relevance...")
 
-    # API call 1: batch relevance filter
     relevant = filter_relevant(client, all_entries)
     print(f"{len(relevant)} relevant. Clustering stories...")
 
@@ -257,23 +303,7 @@ def main():
 
     # API call 2: cluster by topic to deduplicate cross-source coverage
     clusters = cluster_stories(client, relevant)
-
-    # Guard: ensure every index appears in exactly one cluster
-    clustered_indices = {i for cluster in clusters for i in cluster}
-    for i in range(len(relevant)):
-        if i not in clustered_indices:
-            clusters.append([i])
-
-    # For each cluster, pick the highest-tier entry as primary
-    clustered_items = []
-    for cluster in clusters:
-        valid = [i for i in cluster if i < len(relevant)]
-        if not valid:
-            continue
-        cluster_entries = [relevant[i] for i in valid]
-        sorted_entries = sorted(cluster_entries, key=lambda e: _TIER_RANK.get(e["tier"], 99))
-        clustered_items.append(sorted_entries[0])
-
+    clustered_items = resolve_clusters(relevant, clusters)
     print(f"{len(clustered_items)} clustered items. Summarising...")
 
     if debug:
@@ -284,21 +314,6 @@ def main():
 
     # API call 3: batch summarise primary entries
     summaries = summarise_all(client, clustered_items)
-
-    # Tier-aware filter: Official always shown; Analysis on uk_relevance >= 3; Discourse on uk_relevance >= 4
-    combined = [
-        (s, e)
-        for s, e in zip(summaries, clustered_items)
-        if e["tier"] == "Official"
-        or (e["tier"] == "Analysis" and s.get("uk_relevance", 0) >= 2)
-        or (e["tier"] == "Discourse" and s.get("uk_relevance", 0) >= 4)
-    ]
-    # Dynamic backoff: on heavy news days (> 12 items), tighten Discourse to uk_relevance >= 5
-    if len(combined) > 12:
-        combined = [
-            (s, e) for s, e in combined
-            if e["tier"] != "Discourse" or s.get("uk_relevance", 0) >= 5
-        ]
 
     if debug:
         print("--- ALL SCORED ITEMS (before filter) ---")
@@ -311,17 +326,19 @@ def main():
             print(f"[{status}] {e['tier']:10} | imp={s.get('importance')}/5 ukr={s.get('uk_relevance')}/5 | {e['country']:6} | {s.get('title', e['title'])}")
         print()
 
-    if not combined:
+    scored_items = apply_tier_filter(summaries, clustered_items)
+
+    if not scored_items:
         print("No AI-relevant entries found in the latest feed items.")
         return
 
     # Split into UK and international, each sorted by their primary score
-    uk_items   = sorted(
-        [(s, e) for s, e in combined if s.get("country") == "UK"],
+    uk_items = sorted(
+        [(s, e) for s, e in scored_items if s.get("country") == "UK"],
         key=lambda x: x[0].get("uk_relevance", 0), reverse=True
     )
     intl_items = sorted(
-        [(s, e) for s, e in combined if s.get("country") != "UK"],
+        [(s, e) for s, e in scored_items if s.get("country") != "UK"],
         key=lambda x: (x[0].get("uk_relevance", 0), x[0].get("importance", 0)), reverse=True
     )
 
@@ -331,9 +348,6 @@ def main():
     headline = generate_headline(client, [s for s, _ in uk_items + intl_items])
 
     # Format output with UK section first, then international
-    def render_section(items):
-        return "\n\n".join(format_block(s, e) for s, e in items)
-
     sections = []
     if uk_items:
         sections.append("## UK\n\n" + render_section(uk_items))

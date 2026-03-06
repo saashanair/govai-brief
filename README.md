@@ -65,19 +65,19 @@ EMAIL_TO=you@example.com,colleague@example.com
 ## Running locally
 
 ```bash
-uv run python main.py
+uv run govai-brief
 ```
 
 The pipeline only runs Mon–Fri by default. To run on any day:
 
 ```bash
-FORCE_RUN=1 uv run python main.py
+FORCE_RUN=1 uv run govai-brief
 ```
 
 To print intermediate pipeline state (relevant items, cluster primaries, scores):
 
 ```bash
-DEBUG=1 FORCE_RUN=1 uv run python main.py
+DEBUG=1 FORCE_RUN=1 uv run govai-brief
 ```
 
 Output is written to `output.md`. If email credentials are not set, the email step is silently skipped.
@@ -169,9 +169,10 @@ Whether an article appears in the briefing depends on its source tier and UK rel
 ## Project structure
 
 ```
-config.py        — feeds, keywords, prompts, schemas
-gemini.py        — 4 Gemini API functions (relevance, clustering, summarise, headline)
-main.py          — pipeline orchestration, formatting, email, archiving
+govai_brief/
+  config.py      — feeds, keywords, prompts, schemas
+  gemini.py      — 4 Gemini API functions (relevance, clustering, summarise, headline)
+  main.py        — pipeline orchestration, formatting, email, archiving
 output.md        — latest run output (gitignored)
 briefings/       — dated archive, one file per run (committed by Actions)
 .env.example     — environment variable template

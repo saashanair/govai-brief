@@ -1,3 +1,6 @@
+"""Feed sources, model configuration, prompts, and JSON schemas for the AI State Intel pipeline."""
+
+
 def _feed(country, tier, url, lang="en"):
     return {"country": country, "tier": tier, "url": url, "lang": lang}
 
@@ -65,6 +68,12 @@ FEEDS = [
 
 MODEL = "gemini-2.5-flash"       # summarisation + headline — quality matters
 MODEL_FAST = "gemini-2.5-flash-lite"  # relevance filter + clustering — simpler tasks
+
+FEED_ENTRY_LIMIT = 10         # max entries fetched per feed per run
+FILTER_CONTEXT_CHARS = 300    # article text chars sent to relevance filter
+CLUSTER_CONTEXT_CHARS = 300   # article text chars sent to clustering
+SUMMARY_CONTEXT_CHARS = 1000  # article text chars sent to summarisation
+HEADLINE_CONTEXT_CHARS = 200  # body text chars sent to headline generator
 
 RELEVANCE_PROMPT = (
     "Determine which of the following articles are substantially about artificial intelligence, "
