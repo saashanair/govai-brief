@@ -2,11 +2,23 @@ def _feed(country, tier, url, lang="en"):
     return {"country": country, "tier": tier, "url": url, "lang": lang}
 
 
-def govuk_ai_url(from_date, to_date):
-    """Build the gov.uk AI news search feed URL for a given date range."""
+GOVUK_KEYWORDS = [
+    "artificial intelligence",
+    "machine learning",
+    "generative AI",
+    "large language model",
+    "foundation model",
+    "algorithmic",
+    "data strategy",
+    "data governance",
+]
+
+
+def govuk_ai_url(from_date, to_date, keyword="artificial intelligence"):
+    """Build the gov.uk news search feed URL for a given date range and keyword."""
     return (
         "https://www.gov.uk/search/news-and-communications.atom"
-        f"?keywords=artificial+intelligence"
+        f"?keywords={keyword.replace(' ', '+')}"
         f"&public_timestamp%5Bfrom%5D={from_date.strftime('%d/%m/%Y')}"
         f"&public_timestamp%5Bto%5D={to_date.strftime('%d/%m/%Y')}"
         f"&order=updated-newest"
@@ -15,18 +27,11 @@ def govuk_ai_url(from_date, to_date):
 
 FEEDS = [
     # Tier 1 — UK government
-    # Note: gov.uk AI search is injected dynamically by main.py with the correct date range
+    # Note: gov.uk keyword searches are injected dynamically by main.py (see GOVUK_KEYWORDS)
+    _feed("UK", "Official", "https://www.england.nhs.uk/feed/"),                           # NHS England
+    _feed("UK", "Official", "https://www.bankofengland.co.uk/rss/news"),                   # Bank of England / PRA
     _feed("UK", "Official", "https://www.publictechnology.net/feed/"),
     _feed("UK", "Official", "https://www.ukauthority.com/rss"),
-    _feed("UK", "Official", "https://www.england.nhs.uk/feed/"),
-    _feed("UK", "Official", "https://gds.blog.gov.uk/feed/"),                               # Government Digital Service
-    _feed("UK", "Official", "https://cddo.blog.gov.uk/feed/"),                              # Central Digital and Data Office
-    _feed("UK", "Official", "https://www.gov.uk/search/news-and-communications.atom?organisations%5B%5D=information-commissioner-s-office"),  # ICO
-    _feed("UK", "Official", "https://www.gov.uk/search/news-and-communications.atom?organisations%5B%5D=competition-and-markets-authority"),   # CMA
-    _feed("UK", "Official", "https://www.gov.uk/search/news-and-communications.atom?organisations%5B%5D=ai-safety-institute"),                  # AI Safety Institute
-    _feed("UK", "Official", "https://www.ncsc.gov.uk/api/1/services/v1/all-rss-feed.xml"),                                                       # NCSC
-    _feed("UK", "Official", "https://www.gov.uk/search/news-and-communications.atom?organisations%5B%5D=defence-and-security-accelerator"),      # DASA
-    _feed("UK", "Official", "https://www.bankofengland.co.uk/rss/news"),                  # Bank of England / PRA
     # Tier 1 — US government
     _feed("US", "Official", "https://www.whitehouse.gov/news/feed"),
     _feed("US", "Official", "https://www.nextgov.com/rss/topic/artificial-intelligence/"),

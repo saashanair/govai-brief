@@ -10,7 +10,7 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from google import genai
 
-from config import FEEDS, govuk_ai_url
+from config import FEEDS, GOVUK_KEYWORDS, govuk_ai_url
 from gemini import filter_relevant, cluster_stories, summarise_all, generate_headline
 
 load_dotenv()
@@ -216,10 +216,13 @@ def main():
     yesterday = today - timedelta(days=1)
     lookback_dates = {lookback_start + timedelta(days=i) for i in range(lookback_days)}
 
-    # Prepend gov.uk AI search with the correct date range for this run
-    govuk_feed = {"country": "UK", "tier": "Official", "lang": "en",
-                  "url": govuk_ai_url(lookback_start, yesterday)}
-    feeds = [govuk_feed] + FEEDS
+    # One gov.uk search feed per keyword; clustering handles any cross-keyword duplicates
+    govuk_feeds = [
+        {"country": "UK", "tier": "Official", "lang": "en",
+         "url": govuk_ai_url(lookback_start, yesterday, kw)}
+        for kw in GOVUK_KEYWORDS
+    ]
+    feeds = govuk_feeds + FEEDS
 
     client = genai.Client(api_key=api_key)
     socket.setdefaulttimeout(10)  # 10s per feed request; prevents hangs on slow/dead feeds
