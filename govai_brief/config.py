@@ -72,8 +72,9 @@ MODEL_FAST = "gemini-2.5-flash-lite"  # relevance filter + clustering — simple
 FEED_ENTRY_LIMIT = 10         # max entries fetched per feed per run
 FILTER_CONTEXT_CHARS = 300    # article text chars sent to relevance filter
 CLUSTER_CONTEXT_CHARS = 300   # article text chars sent to clustering
-SUMMARY_CONTEXT_CHARS = 1000  # article text chars sent to summarisation
+SUMMARY_CONTEXT_CHARS = 1000  # article text chars sent to summarisation (fallback if no full text)
 HEADLINE_CONTEXT_CHARS = 200  # body text chars sent to headline generator
+FULL_ARTICLE_CHARS = 4000     # max chars of full article text sent to summarisation
 
 RELEVANCE_PROMPT = (
     "Determine which of the following articles are substantially about artificial intelligence, "
@@ -137,6 +138,22 @@ SUMMARY_PROMPT = (
     "false otherwise. Always write the summary in English regardless of source language.\n"
 )
 
+SCORE_PROMPT = (
+    "Score each article on two dimensions:\n"
+    "\"importance\": integer 1-5 — "
+    "5: executive order, major legislation passed, national AI strategy launch, or investment above $500M; "
+    "4: significant regulatory guidance, ministerial or cabinet-level announcement, major procurement or partnership; "
+    "3: regional initiative, policy consultation launched, inter-agency framework or pilot programme; "
+    "2: academic research with government funding, minor committee hearing, incremental policy update; "
+    "1: commentary, survey, market research, or general industry news\n"
+    "\"uk_relevance\": integer 1-5 — "
+    "5: directly affects UK AI policy, legislation, procurement, or regulation; "
+    "4: close comparator jurisdiction (US, EU, Australia, Singapore, Canada) making a decision the UK is likely to follow or diverge from; "
+    "3: international development with clear UK policy implications or competitive significance; "
+    "2: general AI governance trend with weak UK connection; "
+    "1: no meaningful UK relevance"
+)
+
 CLUSTER_PROMPT = (
     "Group articles that report on the exact same specific event, announcement, or publication — "
     "for example, the same named contract, the same piece of legislation, the same named fund or "
@@ -149,9 +166,11 @@ CLUSTER_PROMPT = (
 )
 
 HEADLINE_PROMPT = (
-    "Write a 3-5 sentence executive briefing header summarising today's most important AI governance "
-    "and policy developments for a UK government AI practitioner. Lead with UK developments if present, "
-    "then international. Identify the top 2-3 themes and their significance for UK policy. "
+    "Write an executive briefing header for a UK government AI practitioner, in two parts:\n"
+    "- 'uk': 2-3 sentences on the most significant UK AI governance and policy developments today. "
+    "If there are no UK items, write one sentence noting this.\n"
+    "- 'international': 2-3 sentences on the most significant international developments and "
+    "their relevance or implications for UK policy. Identify key themes and direction of travel.\n"
     "Write in a professional, direct briefing style suitable for a senior policy audience."
 )
 
@@ -204,6 +223,25 @@ BATCH_SUMMARY_SCHEMA = {
     "required": ["summaries"],
 }
 
+# Schema for lightweight scoring — importance + uk_relevance only, used before full summarisation
+BATCH_SCORE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "scores": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "importance":   {"type": "integer", "minimum": 1, "maximum": 5},
+                    "uk_relevance": {"type": "integer", "minimum": 1, "maximum": 5},
+                },
+                "required": ["importance", "uk_relevance"],
+            },
+        }
+    },
+    "required": ["scores"],
+}
+
 # Schema for story clustering — groups article indices by topic
 CLUSTER_SCHEMA = {
     "type": "object",
@@ -226,7 +264,8 @@ CLUSTER_SCHEMA = {
 HEADLINE_SCHEMA = {
     "type": "object",
     "properties": {
-        "headline": {"type": "string"},
+        "uk":            {"type": "string"},
+        "international": {"type": "string"},
     },
-    "required": ["headline"],
+    "required": ["uk", "international"],
 }

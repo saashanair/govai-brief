@@ -1,10 +1,12 @@
 """Entry point for the AI State Intel daily briefing pipeline."""
 
 import html as html_lib
+import json
 import os
 import re
 import smtplib
 import socket
+import urllib.request
 import feedparser
 from datetime import datetime, timezone, timedelta
 from dotenv import load_dotenv
@@ -12,8 +14,8 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from google import genai
 
-from .config import FEEDS, GOVUK_KEYWORDS, govuk_ai_url, FEED_ENTRY_LIMIT
-from .gemini import filter_relevant, cluster_stories, summarise_all, generate_headline
+from .config import FEEDS, GOVUK_KEYWORDS, govuk_ai_url, FEED_ENTRY_LIMIT, FULL_ARTICLE_CHARS
+from .gemini import filter_relevant, cluster_stories, score_items, summarise_all, generate_headline
 
 load_dotenv()
 
@@ -24,6 +26,48 @@ _TIER_RANK = {"Official": 0, "Analysis": 1, "Discourse": 2}
 def strip_html(text: str) -> str:
     """Remove HTML tags from feed summary text."""
     return re.sub(r'<[^>]+>', '', text)
+
+
+def fetch_full_article(url: str, limit: int) -> str:
+    """Fetch and extract main body text from a URL. Returns empty string on any error or paywall."""
+    if not url:
+        return ""
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req) as resp:
+            raw = resp.read()
+        try:
+            html = raw.decode("utf-8")
+        except UnicodeDecodeError:
+            html = raw.decode("latin-1", errors="replace")
+        # Try to extract content from <article> or <main> semantic containers
+        lower = html.lower()
+        for tag in ("<article", "<main"):
+            pos = lower.find(tag)
+            if pos != -1:
+                html = html[pos:]
+                break
+        text = strip_html(html)
+        text = re.sub(r'\s+', ' ', text).strip()
+        # If under 200 chars it's likely a paywall redirect or JS-only page — fall back to RSS
+        if len(text) < 200:
+            return ""
+        return text[:limit]
+    except Exception:
+        return ""
+
+
+def enrich_with_full_text(scored_items: list[tuple]) -> list[tuple]:
+    """Fetch full article text for each passing item and attach it to the entry.
+    Returns [(score, enriched_entry)] — entries gain a 'full_text' key when fetch succeeds."""
+    result = []
+    for score, entry in scored_items:
+        text = fetch_full_article(entry["link"], FULL_ARTICLE_CHARS)
+        enriched = dict(entry)
+        if text:
+            enriched["full_text"] = text
+        result.append((score, enriched))
+    return result
 
 
 def fetch_entries(feed: dict, lookback_dates: set, limit: int = FEED_ENTRY_LIMIT) -> list[dict]:
@@ -61,7 +105,7 @@ def collect_entries(feeds: list[dict], lookback_dates: set) -> list[dict]:
     for feed in feeds:
         all_entries.extend(fetch_entries(feed, lookback_dates))
     # Deduplicate by URL — gov.uk keyword searches often return the same article for multiple
-    # keywords, inflating token usage across all 4 Gemini calls.
+    # keywords, inflating token usage across all Gemini calls.
     seen_urls = set()
     deduped = []
     for e in all_entries:
@@ -90,11 +134,11 @@ def resolve_clusters(relevant_entries: list[dict], clusters: list[list[int]]) ->
     return clustered_items
 
 
-def apply_tier_filter(summaries: list[dict], clustered_items: list[dict]) -> list[tuple[dict, dict]]:
+def apply_tier_filter(scores: list[dict], clustered_items: list[dict]) -> list[tuple[dict, dict]]:
     """Apply tier-aware uk_relevance thresholds, with dynamic backoff on heavy news days."""
     scored_items = [
         (s, e)
-        for s, e in zip(summaries, clustered_items)
+        for s, e in zip(scores, clustered_items)
         if e["tier"] == "Official"
         or (e["tier"] == "Analysis" and s.get("uk_relevance", 0) >= 2)
         or (e["tier"] == "Discourse" and s.get("uk_relevance", 0) >= 4)
@@ -170,7 +214,15 @@ def format_block_html(data: dict, entry: dict) -> str:
     )
 
 
-def build_html_email(subject: str, timestamp: str, headline: str, uk_items: list, intl_items: list) -> str:
+def _split_sentences(text: str) -> list[str]:
+    """Split a multi-sentence paragraph into individual sentences on period boundaries."""
+    if not text:
+        return []
+    parts = re.split(r'(?<=\.)\s+', text.strip())
+    return [s for s in parts if s]
+
+
+def build_html_email(subject: str, timestamp: str, headline: dict, stats: str, uk_items: list, intl_items: list) -> str:
     """Build a complete HTML email document from the briefing content."""
 
     def section_html(label, items):
@@ -186,13 +238,38 @@ def build_html_email(subject: str, timestamp: str, headline: str, uk_items: list
 
     headline_row = ""
     if headline:
-        escaped_headline = html_lib.escape(headline).replace("\n", "<br>")
+        uk_para   = headline.get("uk", "")
+        intl_para = headline.get("international", "")
+
+        def para_html(text):
+            sents = _split_sentences(text)
+            return "".join(
+                f'<p style="margin:0 0 {"0" if i == len(sents) - 1 else "8px"};'
+                f'font-family:Georgia,serif;font-size:14px;line-height:1.7;color:#1a3a5c;">'
+                f'{html_lib.escape(s)}</p>'
+                for i, s in enumerate(sents)
+            ) if text else ""
+
+        stats_html = (
+            f'<p style="margin:0 0 14px;font-family:Arial,sans-serif;font-size:12px;color:#546e7a;">'
+            f'{html_lib.escape(stats)}</p>'
+        )
+        uk_html = (
+            f'<p style="margin:0 0 6px;font-family:Arial,sans-serif;font-size:11px;font-weight:bold;'
+            f'text-transform:uppercase;letter-spacing:1px;color:#1a3a5c;">UK</p>'
+            + para_html(uk_para)
+        ) if uk_para else ""
+        intl_html = (
+            f'<p style="margin:{"14px" if uk_para else "0"} 0 6px;font-family:Arial,sans-serif;font-size:11px;'
+            f'font-weight:bold;text-transform:uppercase;letter-spacing:1px;color:#1a3a5c;">International</p>'
+            + para_html(intl_para)
+        ) if intl_para else ""
+
         headline_row = (
             f'<tr><td style="padding:20px 28px;background:#eef2f7;border-bottom:1px solid #d0d8e4;">'
-            f'<p style="margin:0 0 6px;font-family:Arial,sans-serif;font-size:10px;'
+            f'<p style="margin:0 0 12px;font-family:Arial,sans-serif;font-size:10px;'
             f'text-transform:uppercase;letter-spacing:1.5px;color:#7a8fa6;">Executive Briefing</p>'
-            f'<p style="margin:0;font-family:Georgia,serif;font-size:14px;line-height:1.7;color:#1a3a5c;">'
-            f'{escaped_headline}</p></td></tr>'
+            f'{stats_html}{uk_html}{intl_html}</td></tr>'
         )
 
     return (
@@ -258,6 +335,48 @@ def send_email(subject: str, plain_body: str, html_body: str = None) -> None:
     print(f"Briefing emailed to {len(recipients)} recipient(s)")
 
 
+def send_slack(subject: str, headline: dict, stats: str, uk_items: list, intl_items: list) -> None:
+    """Post a condensed briefing summary to Slack via incoming webhook.
+    Silently skips if SLACK_WEBHOOK_URL is not set."""
+    webhook_url = os.getenv("SLACK_WEBHOOK_URL")
+    if not webhook_url:
+        return
+    lines = [f"*{subject}*"]
+    if headline:
+        uk_para   = headline.get("uk", "")
+        intl_para = headline.get("international", "")
+        lines.append(f"\n_{stats}_")
+        if uk_para:
+            lines.append(f"\n*UK*\n{uk_para}")
+        if intl_para:
+            lines.append(f"\n*International*\n{intl_para}")
+    if uk_items:
+        lines.append("\n*UK*")
+        for s, e in uk_items:
+            title = s.get("title", "—")
+            link = e.get("link", "")
+            lines.append(f"• <{link}|{title}>" if link else f"• {title}")
+    if intl_items:
+        lines.append("\n*International*")
+        for s, e in intl_items:
+            title = s.get("title", "—")
+            link = e.get("link", "")
+            country = s.get("country") or e["country"]
+            lines.append(f"• <{link}|{title}> ({country})" if link else f"• {title} ({country})")
+    lines.append(
+        "\nThe Slack post is the short version — the full briefing is delivered as a weekday email newsletter. "
+        "The email summarises each item listed here with full analysis and a strategic impact note, "
+        "delivered every weekday morning. To get on the list, react :raised_hand: "
+        "— or take a look first: <https://github.com/saashanair/govai-brief/tree/main/briefings|browse past briefings>."
+    )
+    payload = json.dumps({"text": "\n".join(lines)}).encode()
+    req = urllib.request.Request(
+        webhook_url, data=payload, headers={"Content-Type": "application/json"}
+    )
+    urllib.request.urlopen(req)
+    print("Briefing posted to Slack")
+
+
 def main():
     api_key = os.getenv("GEMINI_API_KEY")
     if not api_key:
@@ -304,7 +423,7 @@ def main():
     # API call 2: cluster by topic to deduplicate cross-source coverage
     clusters = cluster_stories(client, relevant)
     clustered_items = resolve_clusters(relevant, clusters)
-    print(f"{len(clustered_items)} clustered items. Summarising...")
+    print(f"{len(clustered_items)} clustered items. Scoring...")
 
     if debug:
         print("--- CLUSTER PRIMARIES ---")
@@ -312,25 +431,37 @@ def main():
             print(f"[{i}] {e['tier']:10} | {e['country']:6} | {e['title']}")
         print()
 
-    # API call 3: batch summarise primary entries
-    summaries = summarise_all(client, clustered_items)
+    # API call 3: lightweight scoring (importance + uk_relevance) — used for tier filter before full fetch
+    scores = score_items(client, clustered_items)
 
     if debug:
         print("--- ALL SCORED ITEMS (before filter) ---")
-        for s, e in zip(summaries, clustered_items):
+        for s, e in zip(scores, clustered_items):
             status = "PASS" if (
                 e["tier"] == "Official"
                 or (e["tier"] == "Analysis" and s.get("uk_relevance", 0) >= 2)
                 or (e["tier"] == "Discourse" and s.get("uk_relevance", 0) >= 4)
             ) else "DROP"
-            print(f"[{status}] {e['tier']:10} | imp={s.get('importance')}/5 ukr={s.get('uk_relevance')}/5 | {e['country']:6} | {s.get('title', e['title'])}")
+            print(f"[{status}] {e['tier']:10} | imp={s.get('importance')}/5 ukr={s.get('uk_relevance')}/5 | {e['country']:6} | {e['title']}")
         print()
 
-    scored_items = apply_tier_filter(summaries, clustered_items)
+    # Filter using lightweight scores — only passing items get full article fetches
+    passing_items = apply_tier_filter(scores, clustered_items)
 
-    if not scored_items:
+    if not passing_items:
         print("No AI-relevant entries found in the latest feed items.")
         return
+
+    # Fetch full article text for passing items only, then summarise with enriched content
+    print(f"{len(passing_items)} items passed tier filter. Fetching full article text...")
+    enriched_items = enrich_with_full_text(passing_items)
+
+    # API call 4: batch summarise with full article text where available
+    print("Summarising...")
+    summaries = summarise_all(client, [e for _, e in enriched_items])
+
+    # Pair summaries with their source entries
+    scored_items = list(zip(summaries, [e for _, e in enriched_items]))
 
     # Split into UK and international, each sorted by their primary score
     uk_items = sorted(
@@ -342,9 +473,18 @@ def main():
         key=lambda x: (x[0].get("uk_relevance", 0), x[0].get("importance", 0)), reverse=True
     )
 
+    # Compute stats snapshot (no API call)
+    total_items = len(uk_items) + len(intl_items)
+    high_importance = sum(1 for s, _ in uk_items + intl_items if s.get("importance", 0) >= 4)
+    stats = (
+        f"{total_items} item{'s' if total_items != 1 else ''} — "
+        f"{len(uk_items)} UK · {len(intl_items)} International"
+        + (f" · {high_importance} at importance 4+" if high_importance else "")
+    )
+
     print("Generating executive summary...")
 
-    # API call 4: executive briefing header
+    # API call 5: executive briefing header
     headline = generate_headline(client, [s for s, _ in uk_items + intl_items])
 
     # Format output with UK section first, then international
@@ -357,18 +497,22 @@ def main():
     output = "\n\n---\n\n".join(sections)
     print(output)
 
-    total = len(uk_items) + len(intl_items)
     timestamp = datetime.now(timezone.utc).strftime("Generated: %Y-%m-%d %H:%M UTC")
 
     # Build full content string (used for both file and email)
     full_content = f"{timestamp}\n\n"
-    if headline:
-        full_content += f"## Today's Briefing\n\n{headline}\n\n---\n\n"
-    full_content += f"{output}\n"
+    uk_para   = headline.get("uk", "")
+    intl_para = headline.get("international", "")
+    full_content += f"## Today's Briefing\n\n_{stats}_\n\n"
+    if uk_para:
+        full_content += f"**UK:** {uk_para}\n\n"
+    if intl_para:
+        full_content += f"**International:** {intl_para}\n\n"
+    full_content += f"---\n\n{output}\n"
 
     with open("output.md", "w") as f:
         f.write(full_content)
-    print(f"\nWritten to output.md ({total} items: {len(uk_items)} UK, {len(intl_items)} international)")
+    print(f"\nWritten to output.md ({total_items} items: {len(uk_items)} UK, {len(intl_items)} international)")
 
     os.makedirs("briefings", exist_ok=True)
     dated_path = f"briefings/{today.strftime('%Y-%m-%d')}.md"
@@ -383,8 +527,9 @@ def main():
         date_label = today.strftime("%-d %B %Y")
     subject = f"AI Governance Briefing — {date_label}"
 
-    html_body = build_html_email(subject, timestamp, headline, uk_items, intl_items)
+    html_body = build_html_email(subject, timestamp, headline, stats, uk_items, intl_items)
     send_email(subject, full_content, html_body)
+    send_slack(subject, headline, stats, uk_items, intl_items)
 
 
 if __name__ == "__main__":
