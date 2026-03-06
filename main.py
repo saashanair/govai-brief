@@ -322,6 +322,12 @@ def main():
         f.write(full_content)
     print(f"\nWritten to output.md ({total} items: {len(uk_items)} UK, {len(intl_items)} international)")
 
+    os.makedirs("briefings", exist_ok=True)
+    dated_path = f"briefings/{today.strftime('%Y-%m-%d')}.md"
+    with open(dated_path, "w") as f:
+        f.write(full_content)
+    print(f"Archived to {dated_path}")
+
     # Build email subject — Monday gets a weekend-roundup label
     if weekday == 0:
         date_label = f"{lookback_start.strftime('%-d %b')}–{yesterday.strftime('%-d %b %Y')} (weekend roundup)"
