@@ -120,12 +120,13 @@ SUMMARY_PROMPT = (
 )
 
 CLUSTER_PROMPT = (
-    "Group the following articles by topic or event. Articles covering the same event, "
-    "announcement, or subject from different sources should be placed in the same cluster. "
-    "Pay particular attention to grouping articles that describe the same named event "
-    "(e.g. a summit, a piece of legislation, a specific fund or programme, or a named announcement) "
-    "even when framed from different angles, reported by different outlets, or using different headlines. "
-    "Articles about distinct topics should be in separate clusters. "
+    "Group articles that report on the exact same specific event, announcement, or publication — "
+    "for example, the same named contract, the same piece of legislation, the same named fund or "
+    "strategy document, or the same specific government decision covered by multiple outlets. "
+    "Do NOT cluster articles simply because they share a country, a government department, or a "
+    "general theme. Separate procurements, separate policy announcements, and separate government "
+    "initiatives must each be in their own cluster even if they all relate to AI in the same country. "
+    "When in doubt, give articles their own cluster. "
     "Return every article index exactly once across all clusters."
 )
 

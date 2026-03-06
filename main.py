@@ -232,11 +232,18 @@ def main():
     for feed in feeds:
         all_entries.extend(fetch_entries(feed, lookback_dates))
 
+    debug = bool(os.getenv("DEBUG"))
     print(f"Fetched {len(all_entries)} entries. Filtering for AI relevance...")
 
     # API call 1: batch relevance filter
     relevant = filter_relevant(client, all_entries)
     print(f"{len(relevant)} relevant. Clustering stories...")
+
+    if debug:
+        print("\n--- RELEVANT ITEMS ---")
+        for i, e in enumerate(relevant):
+            print(f"[{i}] {e['tier']:10} | {e['country']:6} | {e['title']}")
+        print()
 
     # API call 2: cluster by topic to deduplicate cross-source coverage
     clusters = cluster_stories(client, relevant)
@@ -259,6 +266,12 @@ def main():
 
     print(f"{len(clustered_items)} clustered items. Summarising...")
 
+    if debug:
+        print("--- CLUSTER PRIMARIES ---")
+        for i, e in enumerate(clustered_items):
+            print(f"[{i}] {e['tier']:10} | {e['country']:6} | {e['title']}")
+        print()
+
     # API call 3: batch summarise primary entries
     summaries = summarise_all(client, clustered_items)
 
@@ -276,6 +289,17 @@ def main():
             (s, e) for s, e in combined
             if e["tier"] != "Discourse" or s.get("uk_relevance", 0) >= 5
         ]
+
+    if debug:
+        print("--- ALL SCORED ITEMS (before filter) ---")
+        for s, e in zip(summaries, clustered_items):
+            status = "PASS" if (
+                e["tier"] == "Official"
+                or (e["tier"] == "Analysis" and s.get("uk_relevance", 0) >= 2)
+                or (e["tier"] == "Discourse" and s.get("uk_relevance", 0) >= 4)
+            ) else "DROP"
+            print(f"[{status}] {e['tier']:10} | imp={s.get('importance')}/5 ukr={s.get('uk_relevance')}/5 | {e['country']:6} | {s.get('title', e['title'])}")
+        print()
 
     if not combined:
         print("No AI-relevant entries found in the latest feed items.")
