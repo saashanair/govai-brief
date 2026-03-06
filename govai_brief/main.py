@@ -318,7 +318,7 @@ def send_email(subject: str, plain_body: str, html_body: str = None) -> None:
     email_to_raw   = os.getenv("EMAIL_TO")
     if not all([gmail_user, gmail_password, email_to_raw]):
         return  # not configured — local runs without email are fine
-    recipients = [r.strip() for r in email_to_raw.split(",") if r.strip()]
+    recipients = [r.strip() for r in re.split(r'[,\n]', email_to_raw) if r.strip()]
     if html_body:
         msg = MIMEMultipart("alternative")
         msg.attach(MIMEText(plain_body, "plain"))
