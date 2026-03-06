@@ -42,8 +42,8 @@ FEEDS = [
     _feed("UK",   "Analysis", "https://www.adalovelaceinstitute.org/feed/"),               # Ada Lovelace Institute
     _feed("UK",   "Analysis", "https://www.bennettschool.cam.ac.uk/feed/"),                # Bennett School of Public Policy (Cambridge)
     _feed("UK",   "Analysis", "https://www.oii.ox.ac.uk/feed/"),                          # Oxford Internet Institute
-    _feed("UK",   "Analysis", "https://www.publictechnology.net/feed/"),                   # UK public sector tech trade press
-    _feed("UK",   "Analysis", "https://www.ukauthority.com/rss"),                         # UK public sector tech trade press
+    _feed("UK",   "Official", "https://www.publictechnology.net/feed/"),                   # UK public sector tech trade press
+    _feed("UK",   "Official", "https://www.ukauthority.com/rss"),                         # UK public sector tech trade press
     # Tier 2 — Analysis: International think tanks and specialist trade press
     _feed("US",   "Analysis", "https://cset.georgetown.edu/feed/"),                        # Center for Security and Emerging Technology
     _feed("INTL", "Analysis", "https://futureoflife.org/feed/"),

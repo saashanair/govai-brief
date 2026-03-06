@@ -267,7 +267,7 @@ def main():
         (s, e)
         for s, e in zip(summaries, clustered_items)
         if e["tier"] == "Official"
-        or (e["tier"] == "Analysis" and s.get("uk_relevance", 0) >= 3)
+        or (e["tier"] == "Analysis" and s.get("uk_relevance", 0) >= 2)
         or (e["tier"] == "Discourse" and s.get("uk_relevance", 0) >= 4)
     ]
     # Dynamic backoff: on heavy news days (> 12 items), tighten Discourse to uk_relevance >= 5
