@@ -203,11 +203,11 @@ def main():
     if not api_key:
         raise SystemExit("Error: GEMINI_API_KEY not set. Add it to a .env file.")
 
-    # Weekend check: only run Mon–Fri
+    # Weekend check: only run Mon–Fri (set FORCE_RUN=1 to bypass locally)
     today = datetime.now(timezone.utc).date()
     weekday = today.weekday()  # 0=Mon, 6=Sun
-    if weekday >= 5:
-        print("No briefing on weekends. Run again on Monday.")
+    if weekday >= 5 and not os.getenv("FORCE_RUN"):
+        print("No briefing on weekends. Set FORCE_RUN=1 to override.")
         return
 
     # Monday: cover Fri/Sat/Sun; otherwise just yesterday
