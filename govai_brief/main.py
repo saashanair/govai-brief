@@ -9,6 +9,7 @@ import socket
 import urllib.request
 import feedparser
 from datetime import datetime, timezone, timedelta
+from zoneinfo import ZoneInfo
 from dotenv import load_dotenv
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -381,6 +382,13 @@ def main():
     api_key = os.getenv("GEMINI_API_KEY")
     if not api_key:
         raise SystemExit("Error: GEMINI_API_KEY not set. Add it to a .env file.")
+
+    # UK time guard: two cron entries fire at 7am and 8am UTC to cover BST/GMT.
+    # Only proceed when it's actually 8am UK time (FORCE_RUN bypasses this check).
+    now_uk = datetime.now(ZoneInfo("Europe/London"))
+    if now_uk.hour != 8 and not os.getenv("FORCE_RUN"):
+        print(f"Not 8am UK time (currently {now_uk.strftime('%H:%M')} Europe/London). Skipping.")
+        return
 
     # Weekend check: only run Mon–Fri (set FORCE_RUN=1 to bypass locally)
     today = datetime.now(timezone.utc).date()
