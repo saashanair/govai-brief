@@ -262,12 +262,20 @@ def main():
     # API call 3: batch summarise primary entries
     summaries = summarise_all(client, clustered_items)
 
-    # Filter: Official items always shown; Analysis/Discourse only if importance >= 3
+    # Tier-aware filter: Official always shown; Analysis on uk_relevance >= 3; Discourse on uk_relevance >= 4
     combined = [
         (s, e)
         for s, e in zip(summaries, clustered_items)
-        if e["tier"] == "Official" or s.get("importance", 0) >= 3
+        if e["tier"] == "Official"
+        or (e["tier"] == "Analysis" and s.get("uk_relevance", 0) >= 3)
+        or (e["tier"] == "Discourse" and s.get("uk_relevance", 0) >= 4)
     ]
+    # Dynamic backoff: on heavy news days (> 12 items), tighten Discourse to uk_relevance >= 5
+    if len(combined) > 12:
+        combined = [
+            (s, e) for s, e in combined
+            if e["tier"] != "Discourse" or s.get("uk_relevance", 0) >= 5
+        ]
 
     if not combined:
         print("No AI-relevant entries found in the latest feed items.")

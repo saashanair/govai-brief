@@ -26,35 +26,32 @@ def govuk_ai_url(from_date, to_date, keyword="artificial intelligence"):
 
 
 FEEDS = [
-    # Tier 1 — UK government
+    # Tier 1 — Official: UK
     # Note: gov.uk keyword searches are injected dynamically by main.py (see GOVUK_KEYWORDS)
     _feed("UK", "Official", "https://www.england.nhs.uk/feed/"),                           # NHS England
     _feed("UK", "Official", "https://www.bankofengland.co.uk/rss/news"),                   # Bank of England / PRA
-    _feed("UK", "Official", "https://www.publictechnology.net/feed/"),
-    _feed("UK", "Official", "https://www.ukauthority.com/rss"),
-    # Tier 1 — US government
+    # Tier 1 — Official: US
     _feed("US", "Official", "https://www.whitehouse.gov/news/feed"),
-    _feed("US", "Official", "https://www.nextgov.com/rss/topic/artificial-intelligence/"),
-    _feed("US", "Official", "https://statescoop.com/feed/"),
-    _feed("US", "Official", "https://www.meritalk.com/articles/feed/"),
-    # Tier 1 — EU government
+    # Tier 1 — Official: EU
     _feed("EU", "Official", "https://digital-strategy.ec.europa.eu/en/rss.xml"),
-    # Tier 1 — Multilateral / intergovernmental
+    # Tier 1 — Official: Multilateral / intergovernmental
     _feed("INTL",  "Official", "https://www.itu.int/hub/rss/"),                            # UN telecoms + AI standards
     _feed("ASEAN", "Official", "https://asean.org/feed/"),
     _feed("AU",    "Official", "https://au.int/en/rss.xml"),                               # African Union
-    _feed("APAC",  "Official", "https://opengovasia.com/feed/"),                           # Asia-Pacific public sector
-    # Tier 2 — Analysis
+    # Tier 2 — Analysis: UK think tanks and specialist trade press
     _feed("UK",   "Analysis", "https://www.adalovelaceinstitute.org/feed/"),               # Ada Lovelace Institute
     _feed("UK",   "Analysis", "https://www.bennettschool.cam.ac.uk/feed/"),                # Bennett School of Public Policy (Cambridge)
     _feed("UK",   "Analysis", "https://www.oii.ox.ac.uk/feed/"),                          # Oxford Internet Institute
-    _feed("US",   "Analysis", "https://cset.georgetown.edu/feed/"),
+    _feed("UK",   "Analysis", "https://www.publictechnology.net/feed/"),                   # UK public sector tech trade press
+    _feed("UK",   "Analysis", "https://www.ukauthority.com/rss"),                         # UK public sector tech trade press
+    # Tier 2 — Analysis: International think tanks and specialist trade press
+    _feed("US",   "Analysis", "https://cset.georgetown.edu/feed/"),                        # Center for Security and Emerging Technology
     _feed("INTL", "Analysis", "https://futureoflife.org/feed/"),
-    _feed("US",   "Analysis", "https://fedscoop.com/feed/"),
-    _feed("US",   "Analysis", "https://www.defenseone.com/rss/all/"),
+    _feed("US",   "Analysis", "https://fedscoop.com/feed/"),                               # US federal IT trade press
     _feed("INTL", "Analysis", "https://www.accessnow.org/feed/"),
     _feed("EU",   "Analysis", "https://algorithmwatch.org/en/feed/"),
-    _feed("EU",   "Analysis", "https://www.euractiv.com/feed/"),
+    _feed("APAC", "Analysis", "https://opengovasia.com/feed/"),                            # Asia-Pacific public sector trade press
+    _feed("US",   "Analysis", "https://www.nextgov.com/rss/topic/artificial-intelligence/"),  # US federal IT trade press
     # Tier 3 — Discourse
     _feed("INTL",  "Discourse", "https://www.technologyreview.com/topic/artificial-intelligence/feed"),
     _feed("INTL",  "Discourse", "https://www.wired.com/feed/rss"),
@@ -62,6 +59,8 @@ FEEDS = [
     _feed("INTL",  "Discourse", "https://restofworld.org/feed/"),
     _feed("APAC",  "Discourse", "https://www.computerworld.com/au/feed/"),
     _feed("Gulf",  "Discourse", "https://www.tahawultech.com/feed/"),
+    _feed("US",    "Discourse", "https://www.defenseone.com/rss/all/"),                    # US defense policy journalism
+    _feed("EU",    "Discourse", "https://www.euractiv.com/feed/"),                         # EU policy journalism
 ]
 
 MODEL = "gemini-2.5-flash"
